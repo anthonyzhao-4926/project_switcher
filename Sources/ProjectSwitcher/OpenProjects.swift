@@ -5,8 +5,17 @@ struct OpenProject: Identifiable, Hashable {
     let id: String
     let name: String
     let path: String
+    /// 当前已打开的 Cursor 窗口；扫描到的未打开项目为 false
+    let isOpen: Bool
 
     var searchText: String { "\(name) \(path)" }
+
+    init(id: String, name: String, path: String, isOpen: Bool = true) {
+        self.id = id
+        self.name = name
+        self.path = path
+        self.isOpen = isOpen
+    }
 }
 
 /// 仅记录用户在本切换器里点开过的顺序
@@ -286,6 +295,9 @@ enum CursorOpenProjects {
             "/Users/Shared/github_repo",
         ] {
             roots.insert(extra)
+        }
+        for scanRoot in ScanRoots.orderedPaths() {
+            roots.insert(scanRoot)
         }
         for root in roots {
             let candidate = LocalRecentProjects.normalize((root as NSString).appendingPathComponent(name))

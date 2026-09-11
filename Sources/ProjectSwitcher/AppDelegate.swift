@@ -25,6 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        AppMainMenu.install()
+
         let panelController = SwitcherPanelController()
         self.panelController = panelController
         statusItemController = StatusItemController(panelController: panelController)
@@ -50,5 +52,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return NSWorkspace.shared.runningApplications.contains { app in
             app.bundleIdentifier == bundleId && app.processIdentifier != myPID
         }
+    }
+}
+
+/// 菜单栏应用默认没有「编辑」菜单，⌘V / 右键粘贴不会进输入框。
+enum AppMainMenu {
+    static func install() {
+        let mainMenu = NSMenu()
+
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "隐藏 Project Switcher", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "退出 Project Switcher", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+        mainMenu.addItem(appItem)
+
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "编辑")
+        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+
+        NSApp.mainMenu = mainMenu
     }
 }

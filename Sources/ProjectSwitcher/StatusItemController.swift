@@ -6,6 +6,7 @@ final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let panelController: SwitcherPanelController
     private let loginItemMenuItem: NSMenuItem
+    private let scanRootsSettings = ScanRootsSettingsController()
 
     init(panelController: SwitcherPanelController) {
         self.panelController = panelController
@@ -42,6 +43,14 @@ final class StatusItemController: NSObject {
         loginItemMenuItem.target = self
         loginItemMenuItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(loginItemMenuItem)
+
+        let scanItem = NSMenuItem(
+            title: "配置扫描路径…",
+            action: #selector(openScanRoots),
+            keyEquivalent: ""
+        )
+        scanItem.target = self
+        menu.addItem(scanItem)
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
@@ -62,6 +71,10 @@ final class StatusItemController: NSObject {
     @objc private func openAccessibility() {
         _ = AccessibilityAuth.isTrusted(prompt: true)
         AccessibilityAuth.openSystemSettings()
+    }
+
+    @objc private func openScanRoots() {
+        scanRootsSettings.show()
     }
 
     @objc private func toggleLoginItem(_ sender: NSMenuItem) {

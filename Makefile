@@ -38,6 +38,13 @@ test: $(VFS_DEP)
 		-o .build/TitleParserSmoke \
 		Sources/ProjectSwitcher/TitleParser.swift Tests/TitleParserSmoke.swift
 	.build/TitleParserSmoke
+	$(SWIFT) $(SWIFTFLAGS) \
+		-o .build/ScanRootsSmoke \
+		Sources/ProjectSwitcher/OpenProjects.swift \
+		Sources/ProjectSwitcher/ScanRoots.swift \
+		Tests/ScanRootsSmoke.swift \
+		-framework AppKit
+	.build/ScanRootsSmoke
 
 app: test build
 	bash scripts/bundle.sh

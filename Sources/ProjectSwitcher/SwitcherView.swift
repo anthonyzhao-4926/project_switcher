@@ -5,6 +5,7 @@ import SwiftUI
 final class SwitcherViewModel: ObservableObject {
     @Published var query = ""
     @Published var projects: [OpenProject] = []
+    @Published var scannedProjects: [OpenProject] = []
     @Published var selectedIndex = 0
     @Published var axTrusted = true
     @Published var statusMessage: String? = nil
@@ -15,18 +16,27 @@ final class SwitcherViewModel: ObservableObject {
             return projects
         }
         let needle = trimmed.lowercased()
-        return projects.filter { project in
-            project.name.lowercased().contains(needle)
-                || project.path.lowercased().contains(needle)
+        let openMatches = projects.filter { matches($0, needle: needle) }
+        let openKeys = Set(projects.map { LocalRecentProjects.normalize($0.path) })
+        let scannedMatches = scannedProjects.filter { project in
+            !openKeys.contains(LocalRecentProjects.normalize(project.path))
+                && matches(project, needle: needle)
         }
+        return openMatches + scannedMatches
     }
 
     func reload() {
         axTrusted = AccessibilityAuth.isTrusted(prompt: false)
         projects = CursorOpenProjects.list()
+        scannedProjects = ProjectFolderScanner.list(roots: ScanRoots.orderedPaths())
         query = ""
         selectedIndex = 0
         statusMessage = nil
+    }
+
+    private func matches(_ project: OpenProject, needle: String) -> Bool {
+        project.name.lowercased().contains(needle)
+            || project.path.lowercased().contains(needle)
     }
 
     /// 选中后立刻置顶并持久化，下次打开也保持
@@ -121,7 +131,7 @@ struct SwitcherView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(.secondary)
-            TextField("搜索已打开的 Cursor 项目", text: $model.query)
+            TextField("搜索已打开或扫描路径中的项目", text: $model.query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 20, weight: .regular))
                 .focused($searchFocused)
@@ -141,10 +151,14 @@ struct SwitcherView: View {
     }
 
     private var emptyState: some View {
-        Text(model.query.isEmpty ? "没有已打开的 Cursor 项目" : "没有匹配的项目")
+        Text(emptyStateText)
             .font(.system(size: 14))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private var emptyStateText: String {
+        model.query.isEmpty ? "没有已打开的 Cursor 项目" : "没有匹配的项目"
     }
 
     private var resultList: some View {
@@ -156,7 +170,7 @@ struct SwitcherView: View {
                             project: project,
                             isSelected: index == model.selectedIndex,
                             onChoose: { onChoose(project) },
-                            onClose: { onClose(project) }
+                            onClose: project.isOpen ? { onClose(project) } : nil
                         )
                         .id(project.id)
                     }
@@ -178,21 +192,34 @@ private struct ProjectRow: View {
     let project: OpenProject
     let isSelected: Bool
     var onChoose: () -> Void
-    var onClose: () -> Void
+    var onClose: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 8) {
             HStack(spacing: 12) {
-                Image(systemName: "folder")
+                Image(systemName: project.isOpen ? "folder" : "folder.badge.plus")
                     .font(.system(size: 16, weight: .medium))
                     .frame(width: 28)
                     .foregroundStyle(isSelected ? Color.white : Color.secondary)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(project.name)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(isSelected ? Color.white : Color.primary)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(project.name)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(isSelected ? Color.white : Color.primary)
+                            .lineLimit(1)
+                        if !project.isOpen {
+                            Text("未打开")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(
+                                    Capsule()
+                                        .fill(isSelected ? Color.white.opacity(0.18) : Color.primary.opacity(0.08))
+                                )
+                        }
+                    }
                     Text(project.path)
                         .font(.system(size: 12))
                         .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
@@ -203,8 +230,10 @@ private struct ProjectRow: View {
             .contentShape(Rectangle())
             .onTapGesture(perform: onChoose)
 
-            CloseIconButton(isSelected: isSelected, action: onClose)
-                .frame(width: 28, height: 28)
+            if let onClose {
+                CloseIconButton(isSelected: isSelected, action: onClose)
+                    .frame(width: 28, height: 28)
+            }
         }
         .padding(.leading, 12)
         .padding(.trailing, 8)
