@@ -40,10 +40,12 @@ test: $(VFS_DEP)
 	.build/TitleParserSmoke
 	$(SWIFT) $(SWIFTFLAGS) \
 		-o .build/ScanRootsSmoke \
+		Sources/ProjectSwitcher/TitleParser.swift \
 		Sources/ProjectSwitcher/OpenProjects.swift \
 		Sources/ProjectSwitcher/ScanRoots.swift \
 		Tests/ScanRootsSmoke.swift \
-		-framework AppKit
+		-framework AppKit \
+		-framework CoreGraphics
 	.build/ScanRootsSmoke
 
 app: test build

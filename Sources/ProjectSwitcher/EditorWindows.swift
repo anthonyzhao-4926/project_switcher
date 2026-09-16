@@ -409,39 +409,67 @@ enum WindowFocuser {
     }
 }
 
+/// 打开 / 切到 Cursor 窗口时使用的布局。默认 Editor，避免进 Agent / Glass。
+enum CursorWindowLayout: String, CaseIterable {
+    case editor
+    case agent
+
+    private static let defaultsKey = "projectSwitcher.windowLayout"
+
+    static var current: CursorWindowLayout {
+        get {
+            if let raw = UserDefaults.standard.string(forKey: defaultsKey),
+               let layout = CursorWindowLayout(rawValue: raw) {
+                return layout
+            }
+            return .editor
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: defaultsKey)
+            UserDefaults.standard.synchronize()
+        }
+    }
+
+    var menuTitle: String {
+        switch self {
+        case .editor: return "Editor（经典窗口）"
+        case .agent: return "Agent"
+        }
+    }
+
+    /// `cursor --classic` / `cursor --glass`
+    var cliFlag: String {
+        switch self {
+        case .editor: return "--classic"
+        case .agent: return "--glass"
+        }
+    }
+}
+
 extension WindowFocuser {
     /// 切到已打开项目：只用正式 Cursor.app / CLI，避免误开 CursorUIViewService.xpc
     static func focusProject(_ project: OpenProject) {
-        if focusViaOpenCursorApp(project.path) {
+        let layout = CursorWindowLayout.current
+        if focusViaCursorCLI(project.path, layout: layout) {
             return
         }
-        _ = focusViaCursorCLI(project.path)
+        _ = focusViaOpenCursorApp(project.path, layout: layout)
     }
 
-    /// 固定走 `open -a Cursor <path>`，不解析 runningApplications（会误命中系统 XPC）
+    /// `open -na Cursor --args --classic <path>`，不要裸 `open -a`（会跟上次活动窗进 Agent）
     @discardableResult
-    private static func focusViaOpenCursorApp(_ path: String) -> Bool {
+    private static func focusViaOpenCursorApp(_ path: String, layout: CursorWindowLayout) -> Bool {
         guard FileManager.default.fileExists(atPath: path) else {
             return false
         }
 
-        // 优先直接指定 /Applications/Cursor.app，避免名字碰撞
-        if let appURL = mainCursorAppURL() {
-            let folderURL = URL(fileURLWithPath: path, isDirectory: true)
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.activates = true
-            NSWorkspace.shared.open(
-                [folderURL],
-                withApplicationAt: appURL,
-                configuration: configuration,
-                completionHandler: nil
-            )
-            return true
-        }
-
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-a", "Cursor", path]
+        if let appURL = mainCursorAppURL() {
+            process.arguments = ["-na", appURL.path, "--args", layout.cliFlag, path]
+        } else {
+            process.arguments = ["-na", "Cursor", "--args", layout.cliFlag, path]
+        }
         do {
             try process.run()
             return true
@@ -451,19 +479,14 @@ extension WindowFocuser {
     }
 
     @discardableResult
-    private static func focusViaCursorCLI(_ path: String) -> Bool {
-        let candidates = [
-            "/usr/local/bin/cursor",
-            "/opt/homebrew/bin/cursor",
-            "\(NSHomeDirectory())/.local/bin/cursor",
-        ]
-        guard let cli = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+    private static func focusViaCursorCLI(_ path: String, layout: CursorWindowLayout) -> Bool {
+        guard let cli = cursorCLIPath() else {
             return false
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: cli)
-        // -r 复用已打开窗口，避免新开
-        process.arguments = ["-r", path]
+        // 不带 -r：复用最近窗口时可能落到 Agent
+        process.arguments = [layout.cliFlag, path]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         do {
@@ -472,6 +495,17 @@ extension WindowFocuser {
         } catch {
             return false
         }
+    }
+
+    private static func cursorCLIPath() -> String? {
+        let candidates = [
+            "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
+            "\(NSHomeDirectory())/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
+            "/usr/local/bin/cursor",
+            "/opt/homebrew/bin/cursor",
+            "\(NSHomeDirectory())/.local/bin/cursor",
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     /// 只接受真正的 Cursor.app，排除 Helper / .xpc
@@ -532,7 +566,13 @@ extension WindowFocuser {
 
         lines.append("storage projects:")
         for project in CursorOpenProjects.list() {
-            lines.append("  \(project.name) => \(project.path)")
+            let kind = project.isWorkspace ? "workspace" : "folder"
+            lines.append("  [\(kind)] \(project.name) => \(project.path)")
+        }
+        lines.append("window titles:")
+        for info in CursorWindowTitles.list() {
+            let kind = info.isWorkspace ? "workspace" : "folder"
+            lines.append("  [\(kind)] \(info.projectName) title=\(info.title.debugDescription)")
         }
 
         let text = lines.joined(separator: "\n") + "\n"
@@ -796,7 +836,7 @@ extension WindowFocuser {
             set closedAny to false
             repeat with w in every window
               set windowName to name of w
-              if windowName contains " — \(escapedName)" or windowName contains " – \(escapedName)" or windowName contains " - \(escapedName)" or windowName is "\(escapedName)" or windowName is "\(escapedName) — Cursor" or windowName is "\(escapedName) - Cursor" then
+              if windowName contains " — \(escapedName)" or windowName contains " – \(escapedName)" or windowName contains " - \(escapedName)" or windowName is "\(escapedName)" or windowName is "\(escapedName) — Cursor" or windowName is "\(escapedName) - Cursor" or windowName contains "\(escapedName) (工作区)" or windowName contains "\(escapedName) (Workspace)" then
                 try
                   click button 1 of w
                   set closedAny to true

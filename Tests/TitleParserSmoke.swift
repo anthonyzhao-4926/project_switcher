@@ -15,6 +15,30 @@ enum TitleParserSmoke {
             "project_manager"
         )
         expect(TitleParser.projectName(from: "project_switcher — Cursor"), "project_switcher")
+        expect(
+            TitleParser.projectName(from: "foo.ts — asa_keyword_bid_hive (工作区) — Cursor"),
+            "asa_keyword_bid_hive"
+        )
+        expect(
+            TitleParser.projectName(from: "asa 关键词批量改价 (Workspace) — Cursor"),
+            "asa 关键词批量改价"
+        )
+        expect(
+            TitleParser.projectName(from: "● bar.go — demo (工作区) — Cursor"),
+            "demo"
+        )
+        if !TitleParser.isWorkspaceWindowTitle("foo.ts — demo (工作区) — Cursor") {
+            fputs("FAIL: workspace title should be detected\n", stderr)
+            exit(1)
+        }
+        if TitleParser.isWorkspaceWindowTitle("foo.ts — demo — Cursor") {
+            fputs("FAIL: folder title should not be workspace\n", stderr)
+            exit(1)
+        }
+        if !TitleParser.belongs(windowTitle: "a — demo (工作区) — Cursor", projectName: "demo") {
+            fputs("FAIL: workspace window should belong to demo\n", stderr)
+            exit(1)
+        }
 
         if !TitleParser.shouldIgnore(title: "Cursor DevTools") {
             fputs("FAIL: DevTools should be ignored\n", stderr)

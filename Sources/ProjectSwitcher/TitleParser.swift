@@ -24,9 +24,13 @@ enum TitleParser {
     }
 
     /// 从 Cursor 窗口标题解析项目名。
-    /// 常见格式：`文件名 — 项目名 — Cursor`、`项目名 — Cursor`。
+    /// 常见格式：`文件名 — 项目名 — Cursor`、`项目名 — Cursor`、
+    /// `文件名 — 工作区名 (工作区) — Cursor`。
     static func projectName(from title: String) -> String {
         var core = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if core.hasPrefix("● ") {
+            core = String(core.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         for suffix in appSuffixes {
             if core.hasSuffix(suffix) {
                 core = String(core.dropLast(suffix.count))
@@ -35,21 +39,51 @@ enum TitleParser {
             }
         }
 
+        let raw: String
         if let last = lastSegment(core, separatedBy: " — ") {
-            return last
+            raw = last
+        } else if let last = lastSegment(core, separatedBy: " – ") {
+            raw = last
+        } else if let last = lastSegment(core, separatedBy: " - ") {
+            raw = last
+        } else {
+            raw = core.isEmpty ? title : core
         }
-        if let last = lastSegment(core, separatedBy: " – ") {
-            return last
+        return stripWorkspaceMarker(raw)
+    }
+
+    /// 标题是否来自多根工作区窗口（带 `(工作区)` / `(Workspace)`）
+    static func isWorkspaceWindowTitle(_ title: String) -> Bool {
+        var core = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        for suffix in appSuffixes {
+            if core.hasSuffix(suffix) {
+                core = String(core.dropLast(suffix.count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                break
+            }
         }
-        if let last = lastSegment(core, separatedBy: " - ") {
-            return last
+        let segment: String
+        if let last = lastSegment(core, separatedBy: " — ") {
+            segment = last
+        } else if let last = lastSegment(core, separatedBy: " – ") {
+            segment = last
+        } else if let last = lastSegment(core, separatedBy: " - ") {
+            segment = last
+        } else {
+            segment = core
         }
-        return core.isEmpty ? title : core
+        return workspaceMarkers.contains { marker in
+            segment.hasSuffix(marker)
+        }
     }
 
     /// 窗口是否属于该项目（按标题解析出的项目名精确匹配，避免 ads 误伤 third_party_ads）
     static func belongs(windowTitle: String, projectName name: String) -> Bool {
-        projectName(from: windowTitle).caseInsensitiveCompare(name) == .orderedSame
+        let parsed = projectName(from: windowTitle)
+        if parsed.caseInsensitiveCompare(name) == .orderedSame {
+            return true
+        }
+        return stripWorkspaceMarker(name).caseInsensitiveCompare(parsed) == .orderedSame
     }
 
     static func matches(windowTitle: String, projectName: String, query: String) -> Bool {
@@ -66,6 +100,23 @@ enum TitleParser {
         " — Cursor",
         " - Cursor",
     ]
+
+    static let workspaceMarkers = [
+        " (工作区)",
+        " (Workspace)",
+    ]
+
+    static func stripWorkspaceMarker(_ name: String) -> String {
+        var result = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        for marker in workspaceMarkers {
+            if result.hasSuffix(marker) {
+                result = String(result.dropLast(marker.count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                break
+            }
+        }
+        return result
+    }
 
     private static func lastSegment(_ text: String, separatedBy separator: String) -> String? {
         let parts = text

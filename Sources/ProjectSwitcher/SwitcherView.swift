@@ -28,15 +28,28 @@ final class SwitcherViewModel: ObservableObject {
     func reload() {
         axTrusted = AccessibilityAuth.isTrusted(prompt: false)
         projects = CursorOpenProjects.list()
-        scannedProjects = ProjectFolderScanner.list(roots: ScanRoots.orderedPaths())
+        scannedProjects = mergedScannedProjects()
         query = ""
         selectedIndex = 0
         statusMessage = nil
     }
 
+    private func mergedScannedProjects() -> [OpenProject] {
+        var seen = Set<String>()
+        var result: [OpenProject] = []
+        let scanned = ProjectFolderScanner.list(roots: ScanRoots.orderedPaths())
+            + WorkspaceFileScanner.list(roots: WorkspaceRoots.orderedPaths())
+        for project in scanned {
+            let key = LocalRecentProjects.normalize(project.path)
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            result.append(project)
+        }
+        return result
+    }
+
     private func matches(_ project: OpenProject, needle: String) -> Bool {
-        project.name.lowercased().contains(needle)
-            || project.path.lowercased().contains(needle)
+        project.searchText.lowercased().contains(needle)
     }
 
     /// 选中后立刻置顶并持久化，下次打开也保持
@@ -197,7 +210,7 @@ private struct ProjectRow: View {
     var body: some View {
         HStack(spacing: 8) {
             HStack(spacing: 12) {
-                Image(systemName: project.isOpen ? "folder" : "folder.badge.plus")
+                Image(systemName: rowIcon)
                     .font(.system(size: 16, weight: .medium))
                     .frame(width: 28)
                     .foregroundStyle(isSelected ? Color.white : Color.secondary)
@@ -208,16 +221,11 @@ private struct ProjectRow: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(isSelected ? Color.white : Color.primary)
                             .lineLimit(1)
+                        if project.isWorkspace {
+                            badge("工作区")
+                        }
                         if !project.isOpen {
-                            Text("未打开")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(
-                                    Capsule()
-                                        .fill(isSelected ? Color.white.opacity(0.18) : Color.primary.opacity(0.08))
-                                )
+                            badge("未打开")
                         }
                     }
                     Text(project.path)
@@ -242,6 +250,25 @@ private struct ProjectRow: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isSelected ? Color.accentColor : Color.clear)
         )
+    }
+
+    private var rowIcon: String {
+        if project.isWorkspace {
+            return project.isOpen ? "square.stack" : "plus.square.on.square"
+        }
+        return project.isOpen ? "folder" : "folder.badge.plus"
+    }
+
+    private func badge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(
+                Capsule()
+                    .fill(isSelected ? Color.white.opacity(0.18) : Color.primary.opacity(0.08))
+            )
     }
 }
 

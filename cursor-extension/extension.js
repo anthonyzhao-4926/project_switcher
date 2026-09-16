@@ -28,9 +28,29 @@ function workspacePaths() {
   return folders.map((folder) => normalize(folder.uri.fsPath)).filter(Boolean);
 }
 
+function workspaceFilePath() {
+  const file = vscode.workspace.workspaceFile;
+  if (!file || file.scheme !== "file") {
+    return "";
+  }
+  return normalize(file.fsPath);
+}
+
 function matches(target, mine) {
+  const wsFile = workspaceFilePath();
+  if (wsFile) {
+    if (wsFile === target) {
+      return true;
+    }
+    if (path.basename(wsFile).toLowerCase() === path.basename(target).toLowerCase()) {
+      return true;
+    }
+  }
   if (mine.includes(target)) {
     return true;
+  }
+  if (target.toLowerCase().endsWith(".code-workspace")) {
+    return false;
   }
   const targetName = path.basename(target).toLowerCase();
   return mine.some((item) => path.basename(item).toLowerCase() === targetName);
@@ -70,7 +90,7 @@ function tryClose() {
 }
 
 function activate() {
-  log(`activate folders=${workspacePaths().join(",") || "(none)"}`);
+  log(`activate folders=${workspacePaths().join(",") || "(none)"} workspaceFile=${workspaceFilePath() || "(none)"}`);
   tryClose();
   setInterval(tryClose, 250);
 }

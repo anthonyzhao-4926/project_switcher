@@ -6,6 +6,7 @@ final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let panelController: SwitcherPanelController
     private let loginItemMenuItem: NSMenuItem
+    private let layoutMenuItems: [CursorWindowLayout: NSMenuItem]
     private let scanRootsSettings = ScanRootsSettingsController()
 
     init(panelController: SwitcherPanelController) {
@@ -16,6 +17,15 @@ final class StatusItemController: NSObject {
             action: #selector(toggleLoginItem(_:)),
             keyEquivalent: ""
         )
+        var layoutItems: [CursorWindowLayout: NSMenuItem] = [:]
+        for layout in CursorWindowLayout.allCases {
+            layoutItems[layout] = NSMenuItem(
+                title: layout.menuTitle,
+                action: #selector(selectWindowLayout(_:)),
+                keyEquivalent: ""
+            )
+        }
+        layoutMenuItems = layoutItems
         super.init()
 
         if let button = statusItem.button {
@@ -44,8 +54,20 @@ final class StatusItemController: NSObject {
         loginItemMenuItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(loginItemMenuItem)
 
+        let layoutMenu = NSMenu()
+        for layout in CursorWindowLayout.allCases {
+            guard let item = layoutMenuItems[layout] else { continue }
+            item.target = self
+            item.representedObject = layout.rawValue
+            layoutMenu.addItem(item)
+        }
+        refreshLayoutMenu()
+        let layoutItem = NSMenuItem(title: "打开窗口布局", action: nil, keyEquivalent: "")
+        layoutItem.submenu = layoutMenu
+        menu.addItem(layoutItem)
+
         let scanItem = NSMenuItem(
-            title: "配置扫描路径…",
+            title: "配置扫描路径和工作区…",
             action: #selector(openScanRoots),
             keyEquivalent: ""
         )
@@ -92,6 +114,22 @@ final class StatusItemController: NSObject {
             alert.messageText = "无法设置登录时启动"
             alert.informativeText = "请先把 App 装到 /Applications，再重试。\n\(loginItemError.localizedDescription)"
             alert.runModal()
+        }
+    }
+
+    @objc private func selectWindowLayout(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let layout = CursorWindowLayout(rawValue: raw) else {
+            return
+        }
+        CursorWindowLayout.current = layout
+        refreshLayoutMenu()
+    }
+
+    private func refreshLayoutMenu() {
+        let current = CursorWindowLayout.current
+        for (layout, item) in layoutMenuItems {
+            item.state = layout == current ? .on : .off
         }
     }
 

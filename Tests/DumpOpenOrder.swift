@@ -14,7 +14,8 @@ enum DumpOpenOrder {
         for (index, project) in projects.enumerated() {
             let key = LocalRecentProjects.normalize(project.path)
             let rank = recent.firstIndex(of: key).map(String.init) ?? "-"
-            fputs("  \(index): \(project.name)  rank=\(rank)  \(project.path)\n", stdout)
+            let kind = project.isWorkspace ? "workspace" : "folder"
+            fputs("  \(index): [\(kind)] \(project.name)  rank=\(rank)  \(project.path)\n", stdout)
         }
     }
 }

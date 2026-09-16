@@ -20,12 +20,12 @@ final class ScanRootsSettingsController {
         let rootView = ScanRootsSettingsView()
         let hostingView = NSHostingView(rootView: rootView)
         let panel = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 420),
-            styleMask: [.titled, .closable, .miniaturizable],
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 620),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        panel.title = "扫描路径"
+        panel.title = "扫描路径和工作区"
         panel.isReleasedWhenClosed = false
         panel.contentView = hostingView
         panel.center()
@@ -36,32 +36,88 @@ final class ScanRootsSettingsController {
 
 @MainActor
 private final class ScanRootsSettingsModel: ObservableObject {
-    @Published var roots: [String] = ScanRoots.orderedPaths()
+    @Published var projectRoots: [String] = ScanRoots.orderedPaths()
+    @Published var workspaceRoots: [String] = WorkspaceRoots.orderedPaths()
 
-    func addPaths(_ paths: [String]) {
+    func addProjectPaths(_ paths: [String]) {
         for path in paths {
             ScanRoots.add(path)
         }
-        roots = ScanRoots.orderedPaths()
+        projectRoots = ScanRoots.orderedPaths()
     }
 
-    func remove(_ path: String) {
+    func removeProject(_ path: String) {
         ScanRoots.remove(path)
-        roots = ScanRoots.orderedPaths()
+        projectRoots = ScanRoots.orderedPaths()
+    }
+
+    func addWorkspacePaths(_ paths: [String]) {
+        for path in paths {
+            WorkspaceRoots.add(path)
+        }
+        workspaceRoots = WorkspaceRoots.orderedPaths()
+    }
+
+    func removeWorkspace(_ path: String) {
+        WorkspaceRoots.remove(path)
+        workspaceRoots = WorkspaceRoots.orderedPaths()
     }
 }
 
 private struct ScanRootsSettingsView: View {
     @StateObject private var model = ScanRootsSettingsModel()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            RootPathSection(
+                title: "项目目录",
+                description: "只扫描这些目录下的一层子文件夹。它们不会出现在默认列表里，只有搜索时才会展示，点击即可打开。",
+                emptyText: "还没有配置项目目录",
+                placeholder: "例如 /Users/Shared/golang_project 或 ~/code",
+                pickMessage: "选择要扫描的项目目录（只会扫描其中一层子文件夹）",
+                icon: "folder",
+                roots: model.projectRoots,
+                onAdd: { model.addProjectPaths($0) },
+                onRemove: { model.removeProject($0) }
+            )
+            Divider()
+            RootPathSection(
+                title: "工作区目录",
+                description: "只扫描这些目录下的一层 `.code-workspace` 文件，不会把子文件夹当成项目。搜索时出现，点击后按当前窗口布局打开。",
+                emptyText: "还没有配置工作区目录",
+                placeholder: "例如 /Users/Shared/cursor_wordspace",
+                pickMessage: "选择存放 .code-workspace 的目录（只会扫描其中一层工作区文件）",
+                icon: "square.stack",
+                roots: model.workspaceRoots,
+                onAdd: { model.addWorkspacePaths($0) },
+                onRemove: { model.removeWorkspace($0) }
+            )
+        }
+        .padding(20)
+        .frame(minWidth: 520, minHeight: 560)
+    }
+}
+
+private struct RootPathSection: View {
+    let title: String
+    let description: String
+    let emptyText: String
+    let placeholder: String
+    let pickMessage: String
+    let icon: String
+    let roots: [String]
+    var onAdd: ([String]) -> Void
+    var onRemove: (String) -> Void
+
     @State private var typedPath = ""
     @State private var inputHint: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("扫描路径")
+                Text(title)
                     .font(.system(size: 15, weight: .semibold))
-                Text("只扫描这些目录下的一层子文件夹。它们不会出现在默认项目列表里，只有搜索时才会展示，点击即可打开。")
+                Text(description)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -71,7 +127,7 @@ private struct ScanRootsSettingsView: View {
                 HStack(spacing: 8) {
                     PastablePathField(
                         text: $typedPath,
-                        placeholder: "输入或粘贴路径，例如 /Users/Shared/golang_project 或 ~/code",
+                        placeholder: placeholder,
                         onSubmit: addTypedPath
                     )
                     .frame(minHeight: 22)
@@ -89,20 +145,20 @@ private struct ScanRootsSettingsView: View {
                 }
             }
 
-            if model.roots.isEmpty {
-                Text("还没有配置扫描路径")
+            if roots.isEmpty {
+                Text(emptyText)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .frame(maxWidth: .infinity, minHeight: 88, maxHeight: .infinity, alignment: .center)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(Color.primary.opacity(0.12), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
                     )
             } else {
                 List {
-                    ForEach(model.roots, id: \.self) { path in
+                    ForEach(roots, id: \.self) { path in
                         HStack(alignment: .center, spacing: 10) {
-                            Image(systemName: "folder")
+                            Image(systemName: icon)
                                 .foregroundStyle(.secondary)
                             Text(path)
                                 .font(.system(size: 13))
@@ -110,7 +166,7 @@ private struct ScanRootsSettingsView: View {
                                 .textSelection(.enabled)
                             Spacer(minLength: 8)
                             Button("移除") {
-                                model.remove(path)
+                                onRemove(path)
                             }
                             .buttonStyle(.borderless)
                         }
@@ -118,11 +174,9 @@ private struct ScanRootsSettingsView: View {
                     }
                 }
                 .listStyle(.inset)
-                .frame(maxHeight: .infinity)
+                .frame(minHeight: 88, maxHeight: .infinity)
             }
         }
-        .padding(20)
-        .frame(minWidth: 520, minHeight: 360)
     }
 
     private func addTypedPath() {
@@ -159,7 +213,7 @@ private struct ScanRootsSettingsView: View {
             inputHint = "没有可添加的路径"
             return
         }
-        model.addPaths(added)
+        onAdd(added)
         typedPath = ""
         inputHint = nil
     }
@@ -180,7 +234,7 @@ private struct ScanRootsSettingsView: View {
         guard isDirectory.boolValue else {
             return .notDirectory(path)
         }
-        if model.roots.contains(where: { LocalRecentProjects.normalize($0) == path }) {
+        if roots.contains(where: { LocalRecentProjects.normalize($0) == path }) {
             return .alreadyAdded(path)
         }
         return .ok(path)
@@ -194,9 +248,9 @@ private struct ScanRootsSettingsView: View {
         openPanel.allowsMultipleSelection = true
         openPanel.canCreateDirectories = false
         openPanel.prompt = "添加"
-        openPanel.message = "选择要扫描的目录（只会扫描其中一层子文件夹）"
+        openPanel.message = pickMessage
         guard openPanel.runModal() == .OK else { return }
-        model.addPaths(openPanel.urls.map(\.path))
+        onAdd(openPanel.urls.map(\.path))
         typedPath = ""
     }
 }
