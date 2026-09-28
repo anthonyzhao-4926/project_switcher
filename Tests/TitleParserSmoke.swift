@@ -39,6 +39,13 @@ enum TitleParserSmoke {
             fputs("FAIL: workspace window should belong to demo\n", stderr)
             exit(1)
         }
+        if !TitleParser.belongs(
+            windowTitle: "~/Library/Application Support/Cursor/User/globalStorage/local.cursor-workspace/workspaces/asa 关键词批量改价 (工作区) — Cursor",
+            projectName: "asa 关键词批量改价"
+        ) {
+            fputs("FAIL: path-style workspace title should belong\n", stderr)
+            exit(1)
+        }
 
         if !TitleParser.shouldIgnore(title: "Cursor DevTools") {
             fputs("FAIL: DevTools should be ignored\n", stderr)

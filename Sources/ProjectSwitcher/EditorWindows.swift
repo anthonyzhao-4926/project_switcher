@@ -583,6 +583,9 @@ extension WindowFocuser {
     /// 关掉该项目对应的 Cursor 窗口。成功才返回 true。绝不 open / -r / 切到该项目。
     @discardableResult
     static func closeProjectWindow(_ project: OpenProject) -> Bool {
+        if project.isWorkspace || CursorWorkspace.isWorkspaceFile(project.path) {
+            return closeWorkspaceWindow(project)
+        }
         if CursorCloseBridge.requestClose(project) {
             return true
         }
@@ -591,6 +594,54 @@ extension WindowFocuser {
             return true
         }
         return closeMatchedWindowsSilently(project)
+    }
+
+    /// 工作区窗口经常没有 workspaceFile，已打开的扩展也不会热加载。先短等扩展，再按标题关，最后才聚焦后发 ⌘⇧W。
+    @discardableResult
+    private static func closeWorkspaceWindow(_ project: OpenProject) -> Bool {
+        if CursorCloseBridge.requestClose(project, timeout: 0.45) {
+            return true
+        }
+        if clickOnscreenTrafficLight(of: project),
+           waitUntilProjectWindowGone(project, hadVisibleMatch: true) {
+            return true
+        }
+        if closeMatchedWindowsSilently(project) {
+            return true
+        }
+        if clickCloseButtonsContainingNameViaAppleScript(project.name),
+           waitUntilProjectWindowGone(project, hadVisibleMatch: true) {
+            return true
+        }
+        if closeWorkspaceViaKeystroke(project) {
+            return true
+        }
+        return false
+    }
+
+    /// 复用已打开的 Editor 窗口，再发「关闭窗口」。不走 Agent。
+    @discardableResult
+    private static func closeWorkspaceViaKeystroke(_ project: OpenProject) -> Bool {
+        guard focusViaCursorCLI(project.path, layout: .editor)
+            || focusViaOpenCursorApp(project.path, layout: .editor) else {
+            return false
+        }
+        Thread.sleep(forTimeInterval: 0.45)
+        postCloseWindowShortcut()
+        return waitUntilProjectWindowGone(project, hadVisibleMatch: true)
+    }
+
+    private static func postCloseWindowShortcut() {
+        let source = CGEventSource(stateID: .hidSystemState)
+        let keyW: CGKeyCode = 13
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: keyW, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: keyW, keyDown: false) else {
+            return
+        }
+        down.flags = [.maskCommand, .maskShift]
+        up.flags = [.maskCommand, .maskShift]
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
     }
 
     /// 点当前屏幕上该窗口左上角红灯，不先切成最近活动窗口。
@@ -729,13 +780,19 @@ extension WindowFocuser {
         return path == project || path.hasPrefix(project + "/")
     }
 
-    /// 以 storage.json 为准：列表来自已打开窗口，关成功后应消失。AX 看不到时不能当成已关掉。
+    /// 工作区以标题 / AX 为准；storage.json 的 openedWindows 会滞后。
     private static func waitUntilProjectWindowGone(_ project: OpenProject, hadVisibleMatch: Bool) -> Bool {
         Thread.sleep(forTimeInterval: 0.4)
+        if !workspaceWindowStillVisible(project) {
+            return true
+        }
         if hadVisibleMatch, windowsBelonging(to: project).isEmpty {
             return true
         }
         Thread.sleep(forTimeInterval: 1.6)
+        if !workspaceWindowStillVisible(project) {
+            return true
+        }
         let stillInStorage = storageHasProject(project)
         if stillInStorage {
             NSLog("closeProjectWindow: storage 里还有 \(project.path)")
@@ -743,11 +800,20 @@ extension WindowFocuser {
         return !stillInStorage
     }
 
-    private static func storageHasProject(_ project: OpenProject) -> Bool {
-        let path = LocalRecentProjects.normalize(project.path)
-        return CursorOpenProjects.list().contains { candidate in
-            LocalRecentProjects.normalize(candidate.path) == path
+    private static func workspaceWindowStillVisible(_ project: OpenProject) -> Bool {
+        if project.isWorkspace || CursorWorkspace.isWorkspaceFile(project.path) {
+            if CursorWindowTitles.list().contains(where: { info in
+                info.isWorkspace && TitleParser.belongs(windowTitle: info.title, projectName: project.name)
+            }) {
+                return true
+            }
+            return !windowsBelonging(to: project).isEmpty
         }
+        return CursorOpenProjects.isLive(project) || !windowsBelonging(to: project).isEmpty
+    }
+
+    private static func storageHasProject(_ project: OpenProject) -> Bool {
+        CursorOpenProjects.isLive(project)
     }
 
     @discardableResult
@@ -837,6 +903,32 @@ extension WindowFocuser {
             repeat with w in every window
               set windowName to name of w
               if windowName contains " — \(escapedName)" or windowName contains " – \(escapedName)" or windowName contains " - \(escapedName)" or windowName is "\(escapedName)" or windowName is "\(escapedName) — Cursor" or windowName is "\(escapedName) - Cursor" or windowName contains "\(escapedName) (工作区)" or windowName contains "\(escapedName) (Workspace)" then
+                try
+                  click button 1 of w
+                  set closedAny to true
+                end try
+              end if
+            end repeat
+            return closedAny
+          end tell
+        end tell
+        """
+        return runAppleScriptBoolean(source)
+    }
+
+    /// 工作区名足够独特，标题里出现即可关，兼容完整路径标题
+    @discardableResult
+    private static func clickCloseButtonsContainingNameViaAppleScript(_ projectName: String) -> Bool {
+        let escapedName = escapeAppleScript(projectName)
+        let processName = CursorAppMatcher.processName
+        let source = """
+        tell application "System Events"
+          if not (exists process "\(processName)") then return false
+          tell process "\(processName)"
+            set closedAny to false
+            repeat with w in every window
+              set windowName to name of w
+              if windowName contains "\(escapedName)" then
                 try
                   click button 1 of w
                   set closedAny to true

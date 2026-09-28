@@ -80,10 +80,24 @@ enum TitleParser {
     /// 窗口是否属于该项目（按标题解析出的项目名精确匹配，避免 ads 误伤 third_party_ads）
     static func belongs(windowTitle: String, projectName name: String) -> Bool {
         let parsed = projectName(from: windowTitle)
-        if parsed.caseInsensitiveCompare(name) == .orderedSame {
+        let want = stripWorkspaceMarker(name)
+        if parsed.caseInsensitiveCompare(want) == .orderedSame {
             return true
         }
-        return stripWorkspaceMarker(name).caseInsensitiveCompare(parsed) == .orderedSame
+        if stripWorkspaceMarker(name).caseInsensitiveCompare(parsed) == .orderedSame {
+            return true
+        }
+        // 工作区标题有时是完整路径 +「(工作区)」
+        if isWorkspaceWindowTitle(windowTitle), !want.isEmpty {
+            let lowerTitle = windowTitle.lowercased()
+            let lowerWant = want.lowercased()
+            if lowerTitle.contains("\(lowerWant) (工作区)")
+                || lowerTitle.contains("\(lowerWant) (workspace)")
+                || parsed.lowercased().hasSuffix("/\(lowerWant)") {
+                return true
+            }
+        }
+        return false
     }
 
     static func matches(windowTitle: String, projectName: String, query: String) -> Bool {

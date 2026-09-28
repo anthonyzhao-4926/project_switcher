@@ -2,7 +2,7 @@
   "name": "project-switcher-close",
   "displayName": "Project Switcher Close",
   "description": "按 Project Switcher 的请求关闭当前 Cursor 窗口",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "local",
   "engines": {
     "vscode": "^1.80.0"

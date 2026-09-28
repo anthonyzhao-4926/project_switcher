@@ -158,6 +158,9 @@ final class SwitcherPanelController: NSObject {
             DispatchQueue.main.async {
                 if closed {
                     self.model.refreshAfterClose(project)
+                } else if !AccessibilityAuth.isTrusted(prompt: false) {
+                    self.model.statusMessage = "没能关掉工作区：请重新勾选辅助功能后再试"
+                    AccessibilityAuth.openSystemSettings()
                 } else {
                     self.model.statusMessage = "没能关掉该项目窗口"
                 }

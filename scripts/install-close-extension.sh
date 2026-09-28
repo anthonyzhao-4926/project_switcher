@@ -3,12 +3,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 EXT_SRC="$ROOT/cursor-extension"
-DEST="$HOME/.cursor/extensions/local.project-switcher-close-0.1.1"
-VSIX="$ROOT/.build/local.project-switcher-close-0.1.1.vsix"
+DEST="$HOME/.cursor/extensions/local.project-switcher-close-0.1.2"
+VSIX="$ROOT/.build/local.project-switcher-close-0.1.2.vsix"
 OBSOLETE="$HOME/.cursor/extensions/.obsolete"
 EXT_JSON="$HOME/.cursor/extensions/extensions.json"
 
 rm -rf "$HOME/.cursor/extensions/zhaoxin.project-switcher-close-0.1.0"
+rm -rf "$HOME/.cursor/extensions/local.project-switcher-close-0.1.1"
 rm -rf "$DEST"
 mkdir -p "$DEST" "$(dirname "$VSIX")"
 cp "$EXT_SRC/package.json" "$EXT_SRC/extension.js" "$EXT_SRC/.vsixmanifest" "$DEST/"
@@ -32,12 +33,12 @@ entries = [e for e in entries if e.get("identifier", {}).get("id") not in (
     "zhaoxin.project-switcher-close",
     "local.project-switcher-close",
 )]
-dest = os.path.expanduser("~/.cursor/extensions/local.project-switcher-close-0.1.1")
+dest = os.path.expanduser("~/.cursor/extensions/local.project-switcher-close-0.1.2")
 entries.append({
     "identifier": {"id": "local.project-switcher-close"},
-    "version": "0.1.1",
+    "version": "0.1.2",
     "location": {"$mid": 1, "path": dest, "scheme": "file"},
-    "relativeLocation": "local.project-switcher-close-0.1.1",
+    "relativeLocation": "local.project-switcher-close-0.1.2",
     "metadata": {
         "isApplicationScoped": False,
         "isMachineScoped": False,

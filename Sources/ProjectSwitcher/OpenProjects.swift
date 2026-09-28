@@ -156,13 +156,15 @@ enum CursorCloseBridge {
 
     /// 让已打开该项目的 Cursor 窗口自己执行 closeWindow，不聚焦、不依赖辅助功能。
     @discardableResult
-    static func requestClose(_ project: OpenProject) -> Bool {
+    static func requestClose(_ project: OpenProject, timeout: TimeInterval = 1.6) -> Bool {
         ensureExtensionInstalled()
         let folder = requestFileURL().deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
         let payload: [String: Any] = [
             "path": LocalRecentProjects.normalize(project.path),
+            "name": project.name,
+            "isWorkspace": project.isWorkspace || CursorWorkspace.isWorkspaceFile(project.path),
             "id": UUID().uuidString,
             "at": Date().timeIntervalSince1970,
             "done": false,
@@ -177,7 +179,7 @@ enum CursorCloseBridge {
             return false
         }
 
-        let deadline = Date().addingTimeInterval(1.6)
+        let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if requestClaimed(id: payload["id"] as? String) {
                 waitUntilNotLive(project, timeout: 0.8)
@@ -214,7 +216,7 @@ enum CursorCloseBridge {
 
     static func ensureExtensionInstalled() {
         let dest = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".cursor/extensions/local.project-switcher-close-0.1.1", isDirectory: true)
+            .appendingPathComponent(".cursor/extensions/local.project-switcher-close-0.1.2", isDirectory: true)
         let sources = [
             Bundle.main.resourceURL?.appendingPathComponent("cursor-extension", isDirectory: true),
             URL(fileURLWithPath: "/Users/Shared/zhaoxin/tools/project_switcher/cursor-extension"),
@@ -243,14 +245,29 @@ enum CursorOpenProjects {
 
     static func isLive(_ project: OpenProject) -> Bool {
         if project.isWorkspace || CursorWorkspace.isWorkspaceFile(project.path) {
-            return liveWorkspacePaths().contains(LocalRecentProjects.normalize(project.path))
-                || liveWorkspaceNames().contains { name in
-                    name.caseInsensitiveCompare(project.name) == .orderedSame
-                }
+            return isWorkspaceWindowLive(project)
         }
         return liveFolderNames().contains { name in
             name.caseInsensitiveCompare(project.name) == .orderedSame
         }
+    }
+
+    /// 先看窗口标题。openedWindows 会滞后：能看到其它工作区标题、但没有这一扇时，视为已关掉。
+    private static func isWorkspaceWindowLive(_ project: OpenProject) -> Bool {
+        let titles = CursorWindowTitles.list()
+        let name = project.name
+        if titles.contains(where: { info in
+            info.isWorkspace && info.projectName.caseInsensitiveCompare(name) == .orderedSame
+        }) {
+            return true
+        }
+        if titles.contains(where: \.isWorkspace) {
+            return false
+        }
+        return liveWorkspacePaths().contains(LocalRecentProjects.normalize(project.path))
+            || liveWorkspaceNames().contains { candidate in
+                candidate.caseInsensitiveCompare(name) == .orderedSame
+            }
     }
 
     /// 以正在跑的 Cursor 窗口 / extension-host 为准，storage.json 只做路径目录
